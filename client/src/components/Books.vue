@@ -312,7 +312,7 @@ export default {
                 this.showMessage = true;
                 return;
             }
-            const path = 'http://127.0.0.1:5000/books';
+            const path = 'http://ec2-3-137-151-250.us-east-2.compute.amazonaws.com/books';
             axios.post(path, payload, { headers: { Authorization: this.token } })
                 .then(() => {
                     this.getBooks();
@@ -325,7 +325,7 @@ export default {
                 });
         },
         getBooks() {
-            const path = 'http://127.0.0.1:5000/books';
+            const path = 'http://ec2-3-137-151-250.us-east-2.compute.amazonaws.com/books';
             axios.get(path)
                 .then((res) => {
                     this.books = res.data.books;
@@ -384,7 +384,7 @@ export default {
                 this.showMessage = true;
                 return;
             }
-            const path = `http://127.0.0.1:5000/books/${bookID}`;
+            const path = `http://ec2-3-137-151-250.us-east-2.compute.amazonaws.com/books/${bookID}`;
             axios.put(path, payload, { headers: { Authorization: this.token } })
                 .then(() => {
                     this.getBooks();
@@ -410,7 +410,7 @@ export default {
             this.removeBook(book.id);
         },
         removeBook(bookID) {
-            const path = `http://127.0.0.1:5000/books/${bookID}`;
+            const path = `http://ec2-3-137-151-250.us-east-2.compute.amazonaws.com/books/${bookID}`;
             axios.delete(path, { headers: { Authorization: this.token } })
                 .then(() => {
                     this.getBooks();
@@ -435,7 +435,7 @@ export default {
             const { username, password } = this.loginForm;
             const payload = { username, password };
 
-            axios.post('http://127.0.0.1:5000/login', payload)
+            axios.post('http://ec2-3-137-151-250.us-east-2.compute.amazonaws.com/login', payload)
                 .then((response) => {
                     if (response.data.token) {
                         this.token = response.data.token;

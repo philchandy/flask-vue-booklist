@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import jwt
 import datetime
@@ -8,10 +8,11 @@ import os
 from dotenv import load_dotenv
 import json 
 
+
 load_dotenv()
 
 #instantiate the app
-app = Flask(__name__)
+app = Flask(__name__, static_folder='../client/dist', static_url_path='')
 bcrypt = Bcrypt(app)
 app.config.from_object(__name__)
 
@@ -149,6 +150,15 @@ def remove_book(book_id):
 @app.route('/ping', methods=['GET'])
 def ping_pong():
     return jsonify("pong")
+
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory(app.static_folder, path)
+
+# Serve the index.html for all other routes (fallback)
+@app.route('/')
+def serve_index():
+    return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
     app.run()
