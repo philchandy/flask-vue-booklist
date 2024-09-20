@@ -1,0 +1,26 @@
+[
+    {
+        "id": "10108a3e1c924f58aff384f3d6a52bb2",
+        "title": "On the Road",
+        "author": "Jack Kerouac",
+        "read": true
+    },
+    {
+        "id": "5bc51a19061d4bab8e3e31a801c796f7",
+        "title": "Green Eggs and Ham",
+        "author": "Dr. Seuss",
+        "read": true
+    },
+    {
+        "id": "93f6b3f1f61d4c3eb88766edb1936ddb",
+        "title": "Atomic Habits",
+        "author": "James Clear",
+        "read": true
+    },
+    {
+        "id": "6e04858226bc4187acc98b5ff5796ec2",
+        "title": "Harry Potter and the Philosopher's Stone",
+        "author": "J. K. Rowling",
+        "read": true
+    }
+]
