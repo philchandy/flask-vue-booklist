@@ -58,7 +58,7 @@ BOOKS = [
     }
 ]
 
-@app.route('/login', methods=['POST'])
+@app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
     username = data.get('username')
@@ -77,7 +77,7 @@ def login():
     return jsonify({'message': 'Invalid credentials'}), 401
 
 
-@app.route('/verify-token', methods=['POST'])
+@app.route('/api/verify-token', methods=['POST'])
 def verify_token():
     token = request.headers.get('Authorization')
 
@@ -92,7 +92,7 @@ def verify_token():
     except jwt.InvalidTokenError:
         return jsonify({'message': 'Invalid token'}), 401
 
-@app.route('/books', methods=['GET', 'POST'])
+@app.route('/api/books', methods=['GET', 'POST'])
 def all_books():
     response_object = {'status': 'success'}
     if request.method == 'POST':
@@ -111,7 +111,7 @@ def all_books():
         response_object['books'] = BOOKS
     return jsonify(response_object)
 
-@app.route('/books/<book_id>', methods=['PUT', 'DELETE'])
+@app.route('/api/books/<book_id>', methods=['PUT', 'DELETE'])
 def single_book(book_id):
     response_object = {'status': 'success'}
     if request.method == 'PUT':
@@ -147,11 +147,11 @@ def remove_book(book_id):
     return False
 
 #sanity check route
-@app.route('/ping', methods=['GET'])
+@app.route('/api/ping', methods=['GET'])
 def ping_pong():
     return jsonify("pong")
 
-@app.route('/<path:path>')
+@app.route('/api/<path:path>')
 def serve_static(path):
     return send_from_directory(app.static_folder, path)
 
