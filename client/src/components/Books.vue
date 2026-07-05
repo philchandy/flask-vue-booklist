@@ -1,10 +1,7 @@
 <template>
-    <div class="container">
+    <div class="container books-page">
         <div class="row">
             <div class="col-sm-10">
-                <h1>Books</h1>
-                <hr><br><br>
-
                 <alert :message="message" v-if='showMessage'></alert>
 
                 <button
@@ -15,10 +12,8 @@
                     Add Book
                 </button>
                 <p v-else class="text-secondary mb-0">Log in from the navbar to manage books.</p>
-                
-                <br><br>
 
-                <table class="table table-hover">
+                <table class="table table-hover mt-4">
                     <thead>
                         <tr>
                             <th scope="col">Title</th>
@@ -365,6 +360,11 @@ export default {
 </script>
 
 <style scoped>
+.books-page {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+}
+
 .table-actions,
 .modal-actions {
     display: flex;

@@ -24,7 +24,7 @@
                             v-if="isAdmin"
                             type="button"
                             class="btn btn-success btn-sm"
-                            @click="togglePostModal()">
+                            @click="$router.push('/posts/new')">
                             New Post
                         </button>
                     </div>
@@ -35,9 +35,9 @@
                 {{ errorMessage }}
             </div>
 
-            <div class="row g-4" v-if="filteredPosts.length">
-                <article class="col-md-6" v-for="post in filteredPosts" :key="post.id">
-                    <div class="post-card h-100 p-4">
+            <div class="post-masonry" v-if="filteredPosts.length">
+                <article class="post-tile" v-for="post in filteredPosts" :key="post.id">
+                    <div class="post-card p-4" role="button" tabindex="0" @click="openPost(post.id)" @keyup.enter="openPost(post.id)">
                         <img
                             v-if="post.imageUrl"
                             class="post-image mb-4"
@@ -45,7 +45,7 @@
                             :alt="post.title">
                         <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
                             <time class="text-secondary small" :datetime="post.date">{{ formatDate(post.date) }}</time>
-                            <span class="badge text-bg-light border">{{ post.readTime }}</span>
+                            <span class="badge text-bg-light border" v-if="post.readTime">{{ post.readTime }}</span>
                         </div>
                         <h2 class="h4 mb-3">{{ post.title }}</h2>
                         <div class="post-body text-secondary mb-4">
@@ -64,14 +64,14 @@
                                 :key="tag"
                                 type="button"
                                 class="tag-button"
-                                @click="selectedTag = tag">
+                                @click.stop="selectedTag = tag">
                                 {{ tag }}
                             </button>
                         </div>
-                        <p class="fw-semibold mb-0">{{ post.book }}</p>
+                        <p class="fw-semibold mb-0" v-if="post.book">{{ post.book }}</p>
                         <div class="post-actions mt-4" v-if="isAdmin">
-                            <button type="button" class="btn btn-warning btn-sm" @click="togglePostModal(post)">Edit Post</button>
-                            <button type="button" class="btn btn-danger btn-sm" @click="deletePost(post.id)">Delete Post</button>
+                            <button type="button" class="btn btn-warning btn-sm" @click.stop="openPost(post.id)">Edit Post</button>
+                            <button type="button" class="btn btn-danger btn-sm" @click.stop="deletePost(post.id)">Delete Post</button>
                         </div>
                     </div>
                 </article>
@@ -113,18 +113,11 @@
                                 </div>
                                 <div class="col-md-6">
                                     <label for="postReadTime" class="form-label">Read Time</label>
-                                    <input id="postReadTime" type="text" class="form-control" v-model="postForm.readTime" placeholder="4 min read" required>
+                                    <input id="postReadTime" type="text" class="form-control" v-model="postForm.readTime" placeholder="4 min read">
                                 </div>
                                 <div class="col-md-6">
                                     <label for="postBook" class="form-label">Book</label>
-                                    <input id="postBook" type="text" class="form-control" v-model="postForm.book" required>
-                                </div>
-                                <div class="col-12">
-                                    <label for="postImageUrl" class="form-label">Image URL</label>
-                                    <input id="postImageUrl" type="url" class="form-control" v-model="postForm.imageUrl" placeholder="https://example.com/image.jpg">
-                                </div>
-                                <div class="col-12" v-if="postForm.imageUrl">
-                                    <img class="post-image-preview" :src="postForm.imageUrl" alt="Post image preview">
+                                    <input id="postBook" type="text" class="form-control" v-model="postForm.book">
                                 </div>
                                 <div class="col-12">
                                     <label for="postExcerpt" class="form-label">Post Text</label>
@@ -152,6 +145,30 @@
                                             :disabled="isUploadingImage"
                                             @change="handleInlineImageUpload">
                                         <span class="text-secondary small">Upload or drag images into the post text.</span>
+                                    </div>
+                                    <div class="inline-image-manager mt-3" v-if="postFormInlineImages.length">
+                                        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-2">
+                                            <p class="fw-semibold mb-0">Inline Images</p>
+                                            <button
+                                                type="button"
+                                                class="btn btn-outline-danger btn-sm"
+                                                :disabled="selectedInlineImageLineIndex === null"
+                                                @click="deleteSelectedInlineImage">
+                                                Delete Selected Image
+                                            </button>
+                                        </div>
+                                        <div class="inline-image-list">
+                                            <button
+                                                v-for="image in postFormInlineImages"
+                                                :key="`${image.lineIndex}-${image.src}`"
+                                                type="button"
+                                                class="inline-image-item"
+                                                :class="{ selected: selectedInlineImageLineIndex === image.lineIndex }"
+                                                @click="toggleInlineImageSelection(image.lineIndex)">
+                                                <img :src="image.src" :alt="image.alt">
+                                                <span>{{ image.alt }}</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="col-12">
@@ -194,6 +211,7 @@ export default {
             isLoading: false,
             isUploadingImage: false,
             isDraggingImage: false,
+            selectedInlineImageLineIndex: null,
             errorMessage: '',
             postForm: {
                 id: '',
@@ -224,6 +242,9 @@ export default {
         sortedPosts() {
             return [...this.posts].sort((firstPost, secondPost) => new Date(secondPost.date) - new Date(firstPost.date));
         },
+        postFormInlineImages() {
+            return this.inlineImagesFromText(this.postForm.excerpt);
+        },
     },
     methods: {
         getPosts() {
@@ -241,6 +262,9 @@ export default {
                     this.isLoading = false;
                 });
         },
+            openPost(postId) {
+                this.$router.push(`/posts/${postId}`);
+            },
         buildPostPayload() {
             return {
                 title: this.postForm.title,
@@ -266,6 +290,7 @@ export default {
                 imageUrl: '',
                 tagsInput: '',
             };
+            this.selectedInlineImageLineIndex = null;
         },
         togglePostModal(post = null) {
             if (post) {
@@ -279,6 +304,7 @@ export default {
                     imageUrl: post.imageUrl || '',
                     tagsInput: post.tags?.join(', ') || '',
                 };
+                this.selectedInlineImageLineIndex = null;
             } else if (!this.activePostModal) {
                 this.resetPostForm();
             }
@@ -328,6 +354,32 @@ export default {
                 };
             });
         },
+        inlineImagesFromText(text) {
+            return (text || '').split(/\r?\n/).reduce((images, line, lineIndex) => {
+                const imageMatch = line.trim().match(/^!\[(.*?)]\((.*?)\)$/);
+                if (imageMatch) {
+                    images.push({
+                        lineIndex,
+                        alt: imageMatch[1] || 'Blog post image',
+                        src: imageMatch[2],
+                    });
+                }
+                return images;
+            }, []);
+        },
+        toggleInlineImageSelection(lineIndex) {
+            this.selectedInlineImageLineIndex = this.selectedInlineImageLineIndex === lineIndex ? null : lineIndex;
+        },
+        deleteSelectedInlineImage() {
+            if (this.selectedInlineImageLineIndex === null) {
+                return;
+            }
+
+            const lines = (this.postForm.excerpt || '').split(/\r?\n/);
+            lines.splice(this.selectedInlineImageLineIndex, 1);
+            this.postForm.excerpt = lines.join('\n');
+            this.selectedInlineImageLineIndex = null;
+        },
         handleInlineImageUpload(event) {
             const imageFile = event.target.files?.[0];
             if (!imageFile) {
@@ -337,7 +389,7 @@ export default {
             this.uploadInlineImages([imageFile])
                 .catch((error) => {
                     console.error(error);
-                    this.errorMessage = 'Could not upload that image.';
+                    this.errorMessage = this.uploadErrorMessage(error, 'Could not upload that image.');
                 })
                 .finally(() => {
                     event.target.value = '';
@@ -373,7 +425,7 @@ export default {
             this.uploadInlineImages(imageFiles)
                 .catch((error) => {
                     console.error(error);
-                    this.errorMessage = 'Could not upload the dropped image.';
+                    this.errorMessage = this.uploadErrorMessage(error, 'Could not upload the dropped image.');
                 });
         },
         dragHasFiles(event) {
@@ -404,6 +456,12 @@ export default {
                 this.isUploadingImage = false;
             });
         },
+        uploadErrorMessage(error, fallbackMessage) {
+            if (error.response?.status === 401) {
+                return 'Your login expired. Log out, log back in, and try the image upload again.';
+            }
+            return error.response?.data?.message || fallbackMessage;
+        },
         insertImageAtCursor(imageUrl, altText) {
             const textarea = this.$refs.postExcerpt;
             const marker = `![${altText.replace(/[\[\]]/g, '')}](${imageUrl})`;
@@ -416,6 +474,7 @@ export default {
             const suffix = after && !after.startsWith('\n') ? '\n' : '';
 
             this.postForm.excerpt = `${before}${prefix}${marker}${suffix}${after}`;
+            this.selectedInlineImageLineIndex = null;
             this.$nextTick(() => {
                 const cursorPosition = before.length + prefix.length + marker.length;
                 textarea?.focus();
@@ -438,7 +497,7 @@ export default {
 
 <style scoped>
 .blog-page {
-    background: linear-gradient(135deg, #f8f5ef 0%, #e9f2f0 100%);
+    background: transparent;
     min-height: calc(100vh - 60px);
 }
 
@@ -451,7 +510,20 @@ export default {
     box-shadow: 0 12px 30px rgba(33, 37, 41, 0.08);
 }
 
+.post-masonry {
+    column-count: 2;
+    column-gap: 1.5rem;
+}
+
+.post-tile {
+    display: inline-block;
+    width: 100%;
+    margin: 0 0 1.5rem;
+    break-inside: avoid;
+}
+
 .post-card {
+    cursor: pointer;
     transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
@@ -491,6 +563,50 @@ export default {
     gap: 0.75rem;
 }
 
+.inline-image-manager {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 0.9rem;
+    background: #f8f9fa;
+}
+
+.inline-image-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+}
+
+.inline-image-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: #fff;
+    padding: 0.45rem;
+    text-align: left;
+}
+
+.inline-image-item.selected {
+    border-color: #31554d;
+    box-shadow: 0 0 0 0.2rem rgba(49, 85, 77, 0.16);
+}
+
+.inline-image-item img {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #e9ecef;
+}
+
+.inline-image-item span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85rem;
+}
+
 .post-textarea {
     border-style: dashed;
     transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
@@ -521,5 +637,11 @@ export default {
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
+}
+
+@media (max-width: 768px) {
+    .post-masonry {
+        column-count: 1;
+    }
 }
 </style>
