@@ -6,6 +6,7 @@
         "readTime": "4 min read",
         "excerpt": "A reflection on how small actions compound into long-term change and why identity matters more than short bursts of motivation.",
         "book": "Atomic Habits by James Clear",
+        "imageUrl": "",
         "tags": ["Habits", "Self Improvement"]
     },
     {
@@ -15,6 +16,7 @@
         "readTime": "5 min read",
         "excerpt": "A short note on what travel writing can reveal about ambition, uncertainty, and the urge to keep searching for something new.",
         "book": "On the Road by Jack Kerouac",
+        "imageUrl": "",
         "tags": ["Fiction", "Travel"]
     },
     {
@@ -24,6 +26,7 @@
         "readTime": "3 min read",
         "excerpt": "Some books last because they are playful, direct, and easy to return to. This post looks at clarity as a strength.",
         "book": "Green Eggs and Ham by Dr. Seuss",
+        "imageUrl": "",
         "tags": ["Classic Reads", "Writing"]
     },
     {
@@ -33,6 +36,7 @@
         "readTime": "6 min read",
         "excerpt": "A look at first books, worldbuilding, and how a story invites readers into a larger universe without explaining everything at once.",
         "book": "Harry Potter and the Philosopher's Stone by J. K. Rowling",
+        "imageUrl": "",
         "tags": ["Fiction", "Fantasy"]
     },
     {
@@ -42,6 +46,7 @@
         "readTime": "4 min read",
         "excerpt": "A practical note on choosing books, setting a pace, and keeping a reading list useful instead of letting it become clutter.",
         "book": "Reading list reflections",
+        "imageUrl": "",
         "tags": ["Habits", "Reading Process"]
     }
 ]

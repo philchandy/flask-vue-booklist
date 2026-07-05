@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import json 
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
+from werkzeug.utils import secure_filename
 
 
 load_dotenv()
@@ -19,6 +20,8 @@ PROJECT_DIR = SERVER_DIR.parent
 CLIENT_DIST_DIR = PROJECT_DIR / 'client' / 'dist'
 BOOKS_FILE = SERVER_DIR / 'books.json'
 BLOG_POSTS_FILE = SERVER_DIR / 'blog_posts.json'
+UPLOAD_DIR = SERVER_DIR / 'uploads'
+ALLOWED_IMAGE_EXTENSIONS = {'gif', 'jpeg', 'jpg', 'png', 'webp'}
 MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
 MONGO_DB_NAME = os.getenv('MONGO_DB_NAME', 'book_blog')
 
@@ -26,6 +29,7 @@ MONGO_DB_NAME = os.getenv('MONGO_DB_NAME', 'book_blog')
 app = Flask(__name__, static_folder=str(CLIENT_DIST_DIR), static_url_path='/static')
 bcrypt = Bcrypt(app)
 app.config.from_object(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024
 
 #enable cors
 CORS(app, resources= {r'/*': {"origins": '*'}})
@@ -34,9 +38,6 @@ ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-
-#is it worth creating an actual database for one user login? 
-#probably not
 
 users_db = {
     "admin": {
@@ -60,6 +61,19 @@ def seed_collection(collection, source_file):
 
 def serialize_documents(cursor):
     return list(cursor)
+
+def allowed_image_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
+
+def decode_authorization_header():
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.removeprefix('Bearer ').strip()
+    if not token:
+        return None
+    try:
+        return jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+        return None
 
 try:
     mongo_client.admin.command('ping')
@@ -91,18 +105,30 @@ def login():
 
 @app.route('/api/verify-token', methods=['POST'])
 def verify_token():
-    token = request.headers.get('Authorization')
+    data = decode_authorization_header()
+    if not data:
+        return jsonify({'message': 'Invalid or missing token'}), 401
+    return jsonify({'message': 'Token is valid', 'username': data['username']})
 
-    if not token:
-        return jsonify({'message': 'Token is missing'}), 401
+@app.route('/api/uploads', methods=['POST'])
+def upload_image():
+    if not decode_authorization_header():
+        return jsonify({'message': 'Log in to upload images.'}), 401
 
-    try:
-        data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-        return jsonify({'message': 'Token is valid', 'username': data['username']})
-    except jwt.ExpiredSignatureError:
-        return jsonify({'message': 'Token has expired'}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({'message': 'Invalid token'}), 401
+    image_file = request.files.get('image')
+    if not image_file or image_file.filename == '':
+        return jsonify({'message': 'Choose an image to upload.'}), 400
+
+    if not image_file.mimetype.startswith('image/') or not allowed_image_file(image_file.filename):
+        return jsonify({'message': 'Upload a JPG, PNG, GIF, or WebP image.'}), 400
+
+    UPLOAD_DIR.mkdir(exist_ok=True)
+    original_name = secure_filename(image_file.filename)
+    extension = original_name.rsplit('.', 1)[1].lower()
+    filename = f"{uuid.uuid4().hex}.{extension}"
+    image_file.save(UPLOAD_DIR / filename)
+
+    return jsonify({'url': f'/uploads/{filename}'})
 
 @app.route('/api/books', methods=['GET', 'POST'])
 def all_books():
@@ -153,6 +179,7 @@ def all_posts():
             'readTime': post_data.get('readTime'),
             'excerpt': post_data.get('excerpt'),
             'book': post_data.get('book'),
+            'imageUrl': post_data.get('imageUrl'),
             'tags': post_data.get('tags', []),
         })
         response_object['message'] = 'Post Added!'
@@ -160,10 +187,39 @@ def all_posts():
         response_object['posts'] = serialize_documents(posts_collection.find({}, {'_id': 0}))
     return jsonify(response_object)
 
+@app.route('/api/posts/<post_id>', methods=['PUT', 'DELETE'])
+def single_post(post_id):
+    response_object = {'status': 'success'}
+    if request.method == 'PUT':
+        post_data = request.get_json()
+        posts_collection.update_one(
+            {'id': post_id},
+            {'$set': {
+                'title': post_data.get('title'),
+                'date': post_data.get('date'),
+                'readTime': post_data.get('readTime'),
+                'excerpt': post_data.get('excerpt'),
+                'book': post_data.get('book'),
+                'imageUrl': post_data.get('imageUrl'),
+                'tags': post_data.get('tags', []),
+            }}
+        )
+        response_object['message'] = 'Post updated!'
+
+    if request.method == 'DELETE':
+        posts_collection.delete_one({'id': post_id})
+        response_object['message'] = 'Post removed!'
+
+    return jsonify(response_object)
+
 #sanity check route
 @app.route('/api/ping', methods=['GET'])
 def ping_pong():
     return jsonify("pong")
+
+@app.route('/uploads/<path:filename>')
+def uploaded_file(filename):
+    return send_from_directory(UPLOAD_DIR, filename)
 
 # Serve the built Vue frontend and fall back to index.html for client-side routes.
 @app.route('/', defaults={'path': ''})
