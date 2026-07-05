@@ -7,15 +7,6 @@
 
                 <alert :message="message" v-if='showMessage'></alert>
 
-                <!-- Login button if not logged in, else show the Add Book button -->
-                <button
-                    v-if="!isAdmin"
-                    type="button"
-                    class="btn btn-primary btn-sm"
-                    @click="toggleLoginModal">
-                    Admin Login
-                </button>
-
                 <button
                     v-if="isAdmin"
                     type="button"
@@ -23,6 +14,7 @@
                     @click="toggleAddBookModal">
                     Add Book
                 </button>
+                <p v-else class="text-secondary mb-0">Log in from the navbar to manage books.</p>
                 
                 <br><br>
 
@@ -44,7 +36,7 @@
                                 <span v-else>No</span>
                             </td>
                             <td>
-                                <div class="btn-group" role="group">
+                                <div class="table-actions">
                                     <!-- Show Update/Delete buttons only for admin -->
                                     <button
                                         v-if="isAdmin"
@@ -117,7 +109,7 @@
                                 v-model="addBookForm.read">
                             <label class="form-check-label" for="addBookRead">Read?</label>
                         </div>
-                        <div class="btn-group" role="group">
+                        <div class="modal-actions">
                             <button
                                 type="button"
                                 class="btn btn-primary btn-sm"
@@ -186,7 +178,7 @@
                                 v-model="editBookForm.read">
                             <label class="form-check-label" for="editBookRead">Read?</label>
                         </div>
-                        <div class="btn-group" role="group">
+                        <div class="modal-actions">
                             <button
                                 type="button"
                                 class="btn btn-primary btn-sm"
@@ -206,66 +198,6 @@
         </div>
     </div>
     <div v-if="activeEditBookModal" class="modal-backdrop fade show"></div>
-
-    <!-- Login Modal -->
-    <div
-        ref="loginModal"
-        class="modal fade"
-        :class="{ show: activeLoginModal, 'd-block': activeLoginModal }"
-        tabindex="-1"
-        role="dialog">
-        <div class="modal-dialog" role="document">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Admin Login</h5>
-                    <button
-                        type="button"
-                        class="close"
-                        data-dismiss="modal"
-                        aria-label="Close"
-                        @click="toggleLoginModal">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <form @submit.prevent="handleLoginSubmit">
-                        <div class="mb-3">
-                            <label for="adminUsername" class="form-label">Username:</label>
-                            <input
-                                type="text"
-                                class="form-control"
-                                id="adminUsername"
-                                v-model="loginForm.username"
-                                placeholder="Enter admin username">
-                        </div>
-                        <div class="mb-3">
-                            <label for="adminPassword" class="form-label">Password:</label>
-                            <input
-                                type="password"
-                                class="form-control"
-                                id="adminPassword"
-                                v-model="loginForm.password"
-                                placeholder="Enter admin password">
-                        </div>
-                        <div class="btn-group" role="group">
-                            <button
-                                type="submit"
-                                class="btn btn-primary btn-sm">
-                                Login
-                            </button>
-                            <button
-                                type="button"
-                                class="btn btn-danger btn-sm"
-                                @click="toggleLoginModal">
-                                Cancel
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div v-if="activeLoginModal" class="modal-backdrop fade show"></div>
 </template>
 
 
@@ -275,17 +207,20 @@ import Alert from './Alert.vue';
 
 
 export default {
+    props: {
+        isAdmin: {
+            type: Boolean,
+            default: false,
+        },
+        token: {
+            type: String,
+            default: null,
+        },
+    },
     data() {
         return {
             activeAddBookModal: false,
             activeEditBookModal: false,
-            activeLoginModal: false,
-            isAdmin: false, // Admin status
-            loginForm: {
-                username: '',
-                password: ''
-            },
-            token: null, // Store the JWT token
             addBookForm: {
                 title: '',
                 author: '',
@@ -422,42 +357,18 @@ export default {
                     this.getBooks();
                 });
         },
-        toggleLoginModal() {
-            const body = document.querySelector('body');
-            this.activeLoginModal = !this.activeLoginModal;
-            if (this.activeLoginModal) {
-                body.classList.add('modal-open');
-            } else {
-                body.classList.remove('modal-open');
-            }
-        },
-        handleLoginSubmit() {
-            const { username, password } = this.loginForm;
-            const payload = { username, password };
-
-            axios.post('api/login', payload)
-                .then((response) => {
-                    if (response.data.token) {
-                        this.token = response.data.token;
-                        this.isAdmin = true;
-                        this.message = 'Logged in successfully as Admin';
-                        this.showMessage = true;
-                    } else {
-                        this.message = 'Login failed';
-                        this.showMessage = true;
-                    }
-                })
-                .catch((error) => {
-                    this.message = 'Login failed';
-                    this.showMessage = true;
-                    console.error(error);
-                });
-
-            this.toggleLoginModal();
-        }
     },
     created() {
         this.getBooks();
     },
 };
 </script>
+
+<style scoped>
+.table-actions,
+.modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+</style>

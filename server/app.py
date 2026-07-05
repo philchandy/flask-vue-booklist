@@ -1,16 +1,20 @@
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, abort, jsonify, request, send_from_directory
 from flask_cors import CORS
 import jwt
 import datetime
 from flask_bcrypt import Bcrypt
 import uuid
 import os 
+import re
 from pathlib import Path
 from dotenv import load_dotenv
 import json 
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 from werkzeug.utils import secure_filename
+import boto3
+from botocore.exceptions import ClientError
+from urllib.parse import urlparse
 
 
 load_dotenv()
@@ -24,6 +28,9 @@ UPLOAD_DIR = SERVER_DIR / 'uploads'
 ALLOWED_IMAGE_EXTENSIONS = {'gif', 'jpeg', 'jpg', 'png', 'webp'}
 MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
 MONGO_DB_NAME = os.getenv('MONGO_DB_NAME', 'book_blog')
+AWS_REGION = os.getenv('AWS_REGION')
+AWS_S3_BUCKET = os.getenv('AWS_S3_BUCKET')
+AWS_S3_PUBLIC_BASE_URL = os.getenv('AWS_S3_PUBLIC_BASE_URL')
 
 #instantiate the app
 app = Flask(__name__, static_folder=str(CLIENT_DIST_DIR), static_url_path='/static')
@@ -36,8 +43,19 @@ CORS(app, resources= {r'/*': {"origins": '*'}})
 
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
+SECRET_KEY = os.getenv('SECRET_KEY')
 
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+missing_auth_settings = [
+    name for name, value in {
+        'ADMIN_USERNAME': ADMIN_USERNAME,
+        'ADMIN_PASSWORD': ADMIN_PASSWORD,
+        'SECRET_KEY': SECRET_KEY,
+    }.items() if not value
+]
+if missing_auth_settings:
+    raise RuntimeError(f"Missing required auth environment settings: {', '.join(missing_auth_settings)}")
+
+app.config['SECRET_KEY'] = SECRET_KEY
 
 users_db = {
     "admin": {
@@ -50,6 +68,7 @@ mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
 db = mongo_client[MONGO_DB_NAME]
 books_collection = db.books
 posts_collection = db.blog_posts
+s3_client = boto3.client('s3', region_name=AWS_REGION) if AWS_REGION else boto3.client('s3')
 
 def seed_collection(collection, source_file):
     if collection.count_documents({}) > 0:
@@ -61,6 +80,14 @@ def seed_collection(collection, source_file):
 
 def serialize_documents(cursor):
     return list(cursor)
+
+def serialize_posts(cursor):
+    return [serialize_post(post) for post in cursor]
+
+def serialize_post(post):
+    post['excerpt'] = rewrite_s3_image_references(post.get('excerpt', ''))
+    post['imageUrl'] = rewrite_s3_image_url(post.get('imageUrl'))
+    return post
 
 def allowed_image_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
@@ -74,6 +101,39 @@ def decode_authorization_header():
         return jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
+
+def s3_image_url(object_key):
+    if AWS_S3_PUBLIC_BASE_URL:
+        return f"{AWS_S3_PUBLIC_BASE_URL.rstrip('/')}/{object_key}"
+    return f"/api/uploads/{object_key}"
+
+def rewrite_s3_image_url(image_url):
+    object_key = s3_object_key_from_url(image_url)
+    if object_key:
+        return s3_image_url(object_key)
+    return image_url
+
+def rewrite_s3_image_references(text):
+    if not text:
+        return text
+
+    rewritten_text = text
+    for possible_url in set(re.findall(r'https?://[^\s)"\']+', text)):
+        object_key = s3_object_key_from_url(possible_url)
+        if object_key:
+            rewritten_text = rewritten_text.replace(possible_url, s3_image_url(object_key))
+    return rewritten_text
+
+def s3_object_key_from_url(image_url):
+    if not image_url or not AWS_S3_BUCKET:
+        return None
+
+    parsed_url = urlparse(image_url)
+    host = parsed_url.netloc.lower()
+    bucket_host_prefix = f"{AWS_S3_BUCKET}.s3"
+    if host == f"{AWS_S3_BUCKET}.s3.amazonaws.com" or host.startswith(f"{bucket_host_prefix}."):
+        return parsed_url.path.lstrip('/')
+    return None
 
 try:
     mongo_client.admin.command('ping')
@@ -115,6 +175,9 @@ def upload_image():
     if not decode_authorization_header():
         return jsonify({'message': 'Log in to upload images.'}), 401
 
+    if not AWS_S3_BUCKET or not AWS_REGION:
+        return jsonify({'message': 'S3 is not configured on the server.'}), 500
+
     image_file = request.files.get('image')
     if not image_file or image_file.filename == '':
         return jsonify({'message': 'Choose an image to upload.'}), 400
@@ -122,13 +185,37 @@ def upload_image():
     if not image_file.mimetype.startswith('image/') or not allowed_image_file(image_file.filename):
         return jsonify({'message': 'Upload a JPG, PNG, GIF, or WebP image.'}), 400
 
-    UPLOAD_DIR.mkdir(exist_ok=True)
     original_name = secure_filename(image_file.filename)
     extension = original_name.rsplit('.', 1)[1].lower()
-    filename = f"{uuid.uuid4().hex}.{extension}"
-    image_file.save(UPLOAD_DIR / filename)
+    object_key = f"blog-images/{uuid.uuid4().hex}.{extension}"
 
-    return jsonify({'url': f'/uploads/{filename}'})
+    try:
+        s3_client.upload_fileobj(
+            image_file,
+            AWS_S3_BUCKET,
+            object_key,
+            ExtraArgs={'ContentType': image_file.mimetype},
+        )
+    except ClientError:
+        return jsonify({'message': 'Could not upload image to S3.'}), 500
+
+    return jsonify({'url': s3_image_url(object_key)})
+
+@app.route('/api/uploads/<path:object_key>', methods=['GET'])
+def serve_s3_image(object_key):
+    if not AWS_S3_BUCKET:
+        abort(404)
+
+    try:
+        s3_object = s3_client.get_object(Bucket=AWS_S3_BUCKET, Key=object_key)
+    except ClientError:
+        abort(404)
+
+    return Response(
+        s3_object['Body'].read(),
+        mimetype=s3_object.get('ContentType', 'application/octet-stream'),
+        headers={'Cache-Control': 'public, max-age=31536000'},
+    )
 
 @app.route('/api/books', methods=['GET', 'POST'])
 def all_books():
@@ -184,7 +271,7 @@ def all_posts():
         })
         response_object['message'] = 'Post Added!'
     else:
-        response_object['posts'] = serialize_documents(posts_collection.find({}, {'_id': 0}))
+        response_object['posts'] = serialize_posts(posts_collection.find({}, {'_id': 0}))
     return jsonify(response_object)
 
 @app.route('/api/posts/<post_id>', methods=['PUT', 'DELETE'])
