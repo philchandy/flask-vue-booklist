@@ -5,14 +5,21 @@ import datetime
 from flask_bcrypt import Bcrypt
 import uuid
 import os 
+from pathlib import Path
 from dotenv import load_dotenv
 import json 
 
 
 load_dotenv()
 
+SERVER_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = SERVER_DIR.parent
+CLIENT_DIST_DIR = PROJECT_DIR / 'client' / 'dist'
+BOOKS_FILE = SERVER_DIR / 'books.json'
+BLOG_POSTS_FILE = SERVER_DIR / 'blog_posts.json'
+
 #instantiate the app
-app = Flask(__name__, static_folder='../client/dist', static_url_path='/static')
+app = Flask(__name__, static_folder=str(CLIENT_DIST_DIR), static_url_path='/static')
 bcrypt = Bcrypt(app)
 app.config.from_object(__name__)
 
@@ -34,10 +41,10 @@ users_db = {
     }
 }
 
-with open('books.json', 'r') as f:
+with open(BOOKS_FILE, 'r') as f:
     BOOKS = json.load(f)
 
-with open('blog_posts.json', 'r') as f:
+with open(BLOG_POSTS_FILE, 'r') as f:
     BLOG_POSTS = json.load(f)
 
 @app.route('/api/login', methods=['POST'])
@@ -87,7 +94,7 @@ def all_books():
         })
         response_object['message'] = 'Book Added!'
 
-        with open('books.json', 'w') as f:
+        with open(BOOKS_FILE, 'w') as f:
             json.dump(BOOKS, f, indent=4)
     else:
         response_object['books'] = BOOKS
@@ -108,7 +115,7 @@ def single_book(book_id):
         response_object['message'] = 'Book updated!'
 
         # Save the updated list of books to the JSON file
-        with open('books.json', 'w') as f:
+        with open(BOOKS_FILE, 'w') as f:
             json.dump(BOOKS, f, indent=4)
 
     if request.method == 'DELETE':
@@ -116,7 +123,7 @@ def single_book(book_id):
         response_object['message'] = 'Book Removed!'
 
         # Save the updated list of books to the JSON file
-        with open('books.json', 'w') as f:
+        with open(BOOKS_FILE, 'w') as f:
             json.dump(BOOKS, f, indent=4)
 
     return jsonify(response_object)
@@ -137,7 +144,7 @@ def all_posts():
         })
         response_object['message'] = 'Post Added!'
 
-        with open('blog_posts.json', 'w') as f:
+        with open(BLOG_POSTS_FILE, 'w') as f:
             json.dump(BLOG_POSTS, f, indent=4)
     else:
         response_object['posts'] = BLOG_POSTS
@@ -155,15 +162,14 @@ def remove_book(book_id):
 def ping_pong():
     return jsonify("pong")
 
-@app.route('/assets/<path:path>')
-def serve_assets(path):
-    return send_from_directory(os.path.join(app.static_folder, 'assets'), path)
-
-# Serve the index.html for all other routes (fallback)
-@app.route('/')
+# Serve the built Vue frontend and fall back to index.html for client-side routes.
+@app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
-def serve_index(path=None):
-    return send_from_directory(app.static_folder, 'index.html')
+def serve_client(path):
+    requested_path = CLIENT_DIST_DIR / path
+    if path and requested_path.is_file():
+        return send_from_directory(CLIENT_DIST_DIR, path)
+    return send_from_directory(CLIENT_DIST_DIR, 'index.html')
 
 if __name__ == '__main__':
     app.run()
