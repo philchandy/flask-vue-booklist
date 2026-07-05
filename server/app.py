@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 import json 
+from pymongo import MongoClient
+from pymongo.errors import ServerSelectionTimeoutError
 
 
 load_dotenv()
@@ -17,6 +19,8 @@ PROJECT_DIR = SERVER_DIR.parent
 CLIENT_DIST_DIR = PROJECT_DIR / 'client' / 'dist'
 BOOKS_FILE = SERVER_DIR / 'books.json'
 BLOG_POSTS_FILE = SERVER_DIR / 'blog_posts.json'
+MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
+MONGO_DB_NAME = os.getenv('MONGO_DB_NAME', 'book_blog')
 
 #instantiate the app
 app = Flask(__name__, static_folder=str(CLIENT_DIST_DIR), static_url_path='/static')
@@ -41,11 +45,30 @@ users_db = {
     }
 }
 
-with open(BOOKS_FILE, 'r') as f:
-    BOOKS = json.load(f)
+mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
+db = mongo_client[MONGO_DB_NAME]
+books_collection = db.books
+posts_collection = db.blog_posts
 
-with open(BLOG_POSTS_FILE, 'r') as f:
-    BLOG_POSTS = json.load(f)
+def seed_collection(collection, source_file):
+    if collection.count_documents({}) > 0:
+        return
+    with open(source_file, 'r') as f:
+        seed_data = json.load(f)
+    if seed_data:
+        collection.insert_many(seed_data)
+
+def serialize_documents(cursor):
+    return list(cursor)
+
+try:
+    mongo_client.admin.command('ping')
+    seed_collection(books_collection, BOOKS_FILE)
+    seed_collection(posts_collection, BLOG_POSTS_FILE)
+except ServerSelectionTimeoutError as exc:
+    raise RuntimeError(
+        f"Could not connect to MongoDB at {MONGO_URI}. Start MongoDB locally or set MONGO_URI in .env."
+    ) from exc
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -86,18 +109,15 @@ def all_books():
     response_object = {'status': 'success'}
     if request.method == 'POST':
         post_data = request.get_json()
-        BOOKS.append({
+        books_collection.insert_one({
             'id' : uuid.uuid4().hex,
             'title': post_data.get('title'),
             'author': post_data.get('author'),
             'read': post_data.get('read')
         })
         response_object['message'] = 'Book Added!'
-
-        with open(BOOKS_FILE, 'w') as f:
-            json.dump(BOOKS, f, indent=4)
     else:
-        response_object['books'] = BOOKS
+        response_object['books'] = serialize_documents(books_collection.find({}, {'_id': 0}))
     return jsonify(response_object)
 
 @app.route('/api/books/<book_id>', methods=['PUT', 'DELETE'])
@@ -105,26 +125,19 @@ def single_book(book_id):
     response_object = {'status': 'success'}
     if request.method == 'PUT':
         post_data = request.get_json()
-        remove_book(book_id)
-        BOOKS.append({
-            'id' : uuid.uuid4().hex,
-            'title': post_data.get('title'),
-            'author': post_data.get('author'),
-            'read': post_data.get('read'),
-        })
+        books_collection.update_one(
+            {'id': book_id},
+            {'$set': {
+                'title': post_data.get('title'),
+                'author': post_data.get('author'),
+                'read': post_data.get('read'),
+            }}
+        )
         response_object['message'] = 'Book updated!'
 
-        # Save the updated list of books to the JSON file
-        with open(BOOKS_FILE, 'w') as f:
-            json.dump(BOOKS, f, indent=4)
-
     if request.method == 'DELETE':
-        remove_book(book_id)
+        books_collection.delete_one({'id': book_id})
         response_object['message'] = 'Book Removed!'
-
-        # Save the updated list of books to the JSON file
-        with open(BOOKS_FILE, 'w') as f:
-            json.dump(BOOKS, f, indent=4)
 
     return jsonify(response_object)
 
@@ -133,7 +146,7 @@ def all_posts():
     response_object = {'status': 'success'}
     if request.method == 'POST':
         post_data = request.get_json()
-        BLOG_POSTS.append({
+        posts_collection.insert_one({
             'id': post_data.get('id') or uuid.uuid4().hex,
             'title': post_data.get('title'),
             'date': post_data.get('date'),
@@ -143,19 +156,9 @@ def all_posts():
             'tags': post_data.get('tags', []),
         })
         response_object['message'] = 'Post Added!'
-
-        with open(BLOG_POSTS_FILE, 'w') as f:
-            json.dump(BLOG_POSTS, f, indent=4)
     else:
-        response_object['posts'] = BLOG_POSTS
+        response_object['posts'] = serialize_documents(posts_collection.find({}, {'_id': 0}))
     return jsonify(response_object)
-
-def remove_book(book_id):
-    for book in BOOKS:
-        if book['id'] == book_id:
-            BOOKS.remove(book)
-            return True
-    return False
 
 #sanity check route
 @app.route('/api/ping', methods=['GET'])
