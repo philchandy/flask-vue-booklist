@@ -31,6 +31,7 @@ MONGO_DB_NAME = os.getenv('MONGO_DB_NAME', 'book_blog')
 AWS_REGION = os.getenv('AWS_REGION')
 AWS_S3_BUCKET = os.getenv('AWS_S3_BUCKET')
 AWS_S3_PUBLIC_BASE_URL = os.getenv('AWS_S3_PUBLIC_BASE_URL')
+S3_IMAGE_PREFIX = 'blog-images/'
 
 #instantiate the app
 app = Flask(__name__, static_folder=str(CLIENT_DIST_DIR), static_url_path='/static')
@@ -128,12 +129,51 @@ def s3_object_key_from_url(image_url):
     if not image_url or not AWS_S3_BUCKET:
         return None
 
+    if image_url.startswith(S3_IMAGE_PREFIX):
+        return image_url
+
+    if image_url.startswith('/api/uploads/'):
+        return image_url.removeprefix('/api/uploads/')
+
     parsed_url = urlparse(image_url)
+    if parsed_url.path.startswith('/api/uploads/'):
+        return parsed_url.path.removeprefix('/api/uploads/')
+
     host = parsed_url.netloc.lower()
     bucket_host_prefix = f"{AWS_S3_BUCKET}.s3"
     if host == f"{AWS_S3_BUCKET}.s3.amazonaws.com" or host.startswith(f"{bucket_host_prefix}."):
         return parsed_url.path.lstrip('/')
     return None
+
+def s3_object_keys_from_text(text):
+    if not text:
+        return set()
+
+    image_urls = re.findall(r'!\[[^\]]*]\(([^)]+)\)', text)
+    return {
+        object_key for object_key in (s3_object_key_from_url(image_url) for image_url in image_urls)
+        if object_key and object_key.startswith(S3_IMAGE_PREFIX)
+    }
+
+def s3_object_keys_from_post(post):
+    if not post:
+        return set()
+
+    object_keys = s3_object_keys_from_text(post.get('excerpt', ''))
+    image_url_key = s3_object_key_from_url(post.get('imageUrl'))
+    if image_url_key and image_url_key.startswith(S3_IMAGE_PREFIX):
+        object_keys.add(image_url_key)
+    return object_keys
+
+def delete_s3_objects(object_keys):
+    if not AWS_S3_BUCKET or not object_keys:
+        return
+
+    for object_key in object_keys:
+        try:
+            s3_client.delete_object(Bucket=AWS_S3_BUCKET, Key=object_key)
+        except ClientError:
+            app.logger.warning('Could not delete S3 object %s', object_key)
 
 try:
     mongo_client.admin.command('ping')
@@ -187,7 +227,7 @@ def upload_image():
 
     original_name = secure_filename(image_file.filename)
     extension = original_name.rsplit('.', 1)[1].lower()
-    object_key = f"blog-images/{uuid.uuid4().hex}.{extension}"
+    object_key = f"{S3_IMAGE_PREFIX}{uuid.uuid4().hex}.{extension}"
 
     try:
         s3_client.upload_fileobj(
@@ -278,7 +318,12 @@ def all_posts():
 def single_post(post_id):
     response_object = {'status': 'success'}
     if request.method == 'PUT':
+        existing_post = posts_collection.find_one({'id': post_id}, {'_id': 0})
         post_data = request.get_json()
+        updated_post = {
+            'excerpt': post_data.get('excerpt'),
+            'imageUrl': post_data.get('imageUrl'),
+        }
         posts_collection.update_one(
             {'id': post_id},
             {'$set': {
@@ -291,10 +336,13 @@ def single_post(post_id):
                 'tags': post_data.get('tags', []),
             }}
         )
+        delete_s3_objects(s3_object_keys_from_post(existing_post) - s3_object_keys_from_post(updated_post))
         response_object['message'] = 'Post updated!'
 
     if request.method == 'DELETE':
+        existing_post = posts_collection.find_one({'id': post_id}, {'_id': 0})
         posts_collection.delete_one({'id': post_id})
+        delete_s3_objects(s3_object_keys_from_post(existing_post))
         response_object['message'] = 'Post removed!'
 
     return jsonify(response_object)
