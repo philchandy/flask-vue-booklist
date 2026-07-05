@@ -299,8 +299,9 @@ def all_posts():
     response_object = {'status': 'success'}
     if request.method == 'POST':
         post_data = request.get_json()
+        post_id = post_data.get('id') or uuid.uuid4().hex
         posts_collection.insert_one({
-            'id': post_data.get('id') or uuid.uuid4().hex,
+            'id': post_id,
             'title': post_data.get('title'),
             'date': post_data.get('date'),
             'readTime': post_data.get('readTime'),
@@ -309,14 +310,21 @@ def all_posts():
             'imageUrl': post_data.get('imageUrl'),
             'tags': post_data.get('tags', []),
         })
+        response_object['post'] = serialize_post(posts_collection.find_one({'id': post_id}, {'_id': 0}))
         response_object['message'] = 'Post Added!'
     else:
         response_object['posts'] = serialize_posts(posts_collection.find({}, {'_id': 0}))
     return jsonify(response_object)
 
-@app.route('/api/posts/<post_id>', methods=['PUT', 'DELETE'])
+@app.route('/api/posts/<post_id>', methods=['GET', 'PUT', 'DELETE'])
 def single_post(post_id):
     response_object = {'status': 'success'}
+    if request.method == 'GET':
+        post = posts_collection.find_one({'id': post_id}, {'_id': 0})
+        if not post:
+            return jsonify({'message': 'Post not found'}), 404
+        response_object['post'] = serialize_post(post)
+
     if request.method == 'PUT':
         existing_post = posts_collection.find_one({'id': post_id}, {'_id': 0})
         post_data = request.get_json()
