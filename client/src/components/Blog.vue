@@ -5,7 +5,8 @@
                 <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
                     <div>
                         <p class="fw-semibold mb-1">Filter by tag</p>
-                        <p class="text-secondary mb-0 small">Showing {{ filteredPosts.length }} of {{ posts.length }} posts</p>
+                        <p class="text-secondary mb-0 small" v-if="!isLoading">Showing {{ filteredPosts.length }} of {{ posts.length }} posts</p>
+                        <p class="text-secondary mb-0 small" v-else>Loading posts from server...</p>
                     </div>
                     <div class="d-flex flex-wrap gap-2">
                         <button
@@ -21,8 +22,12 @@
                 </div>
             </div>
 
+            <div class="alert alert-danger" role="alert" v-if="errorMessage">
+                {{ errorMessage }}
+            </div>
+
             <div class="row g-4" v-if="filteredPosts.length">
-                <article class="col-md-6" v-for="post in filteredPosts" :key="post.title">
+                <article class="col-md-6" v-for="post in filteredPosts" :key="post.id">
                     <div class="post-card h-100 p-4">
                         <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
                             <time class="text-secondary small" :datetime="post.date">{{ formatDate(post.date) }}</time>
@@ -55,59 +60,22 @@
 </template>
 
 <script>
+import axios from 'axios';
+
 export default {
     data() {
         return {
             selectedTag: 'All',
-            posts: [
-                {
-                    title: 'Building systems that make progress easier',
-                    date: '2026-07-02',
-                    readTime: '4 min read',
-                    excerpt: 'A reflection on how small actions compound into long-term change and why identity matters more than short bursts of motivation.',
-                    book: 'Atomic Habits by James Clear',
-                    tags: ['Habits', 'Self Improvement'],
-                },
-                {
-                    title: 'Movement, freedom, and restlessness',
-                    date: '2026-06-25',
-                    readTime: '5 min read',
-                    excerpt: 'A short note on what travel writing can reveal about ambition, uncertainty, and the urge to keep searching for something new.',
-                    book: 'On the Road by Jack Kerouac',
-                    tags: ['Fiction', 'Travel'],
-                },
-                {
-                    title: 'Why simple stories stay memorable',
-                    date: '2026-06-12',
-                    readTime: '3 min read',
-                    excerpt: 'Some books last because they are playful, direct, and easy to return to. This post looks at clarity as a strength.',
-                    book: 'Green Eggs and Ham by Dr. Seuss',
-                    tags: ['Classic Reads', 'Writing'],
-                },
-                {
-                    title: 'Starting a series and building a world',
-                    date: '2026-05-30',
-                    readTime: '6 min read',
-                    excerpt: 'A look at first books, worldbuilding, and how a story invites readers into a larger universe without explaining everything at once.',
-                    book: "Harry Potter and the Philosopher's Stone by J. K. Rowling",
-                    tags: ['Fiction', 'Fantasy'],
-                },
-                {
-                    title: 'What makes a reading habit stick',
-                    date: '2026-05-18',
-                    readTime: '4 min read',
-                    excerpt: 'A practical note on choosing books, setting a pace, and keeping a reading list useful instead of letting it become clutter.',
-                    book: 'Reading list reflections',
-                    tags: ['Habits', 'Reading Process'],
-                },
-            ],
+            posts: [],
+            isLoading: false,
+            errorMessage: '',
         };
     },
     computed: {
         tags() {
             const uniqueTags = new Set(['All']);
             this.posts.forEach((post) => {
-                post.tags.forEach((tag) => uniqueTags.add(tag));
+                post.tags?.forEach((tag) => uniqueTags.add(tag));
             });
             return Array.from(uniqueTags);
         },
@@ -115,13 +83,28 @@ export default {
             if (this.selectedTag === 'All') {
                 return this.sortedPosts;
             }
-            return this.sortedPosts.filter((post) => post.tags.includes(this.selectedTag));
+            return this.sortedPosts.filter((post) => post.tags?.includes(this.selectedTag));
         },
         sortedPosts() {
             return [...this.posts].sort((firstPost, secondPost) => new Date(secondPost.date) - new Date(firstPost.date));
         },
     },
     methods: {
+        getPosts() {
+            this.isLoading = true;
+            this.errorMessage = '';
+            axios.get('/api/posts')
+                .then((res) => {
+                    this.posts = res.data.posts;
+                })
+                .catch((error) => {
+                    console.error(error);
+                    this.errorMessage = 'Could not load blog posts from the server.';
+                })
+                .finally(() => {
+                    this.isLoading = false;
+                });
+        },
         formatDate(date) {
             return new Intl.DateTimeFormat('en', {
                 month: 'long',
@@ -129,6 +112,9 @@ export default {
                 year: 'numeric',
             }).format(new Date(date));
         },
+    },
+    created() {
+        this.getPosts();
     },
 };
 </script>

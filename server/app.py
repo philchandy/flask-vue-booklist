@@ -37,6 +37,9 @@ users_db = {
 with open('books.json', 'r') as f:
     BOOKS = json.load(f)
 
+with open('blog_posts.json', 'r') as f:
+    BLOG_POSTS = json.load(f)
+
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -116,6 +119,28 @@ def single_book(book_id):
         with open('books.json', 'w') as f:
             json.dump(BOOKS, f, indent=4)
 
+    return jsonify(response_object)
+
+@app.route('/api/posts', methods=['GET', 'POST'])
+def all_posts():
+    response_object = {'status': 'success'}
+    if request.method == 'POST':
+        post_data = request.get_json()
+        BLOG_POSTS.append({
+            'id': post_data.get('id') or uuid.uuid4().hex,
+            'title': post_data.get('title'),
+            'date': post_data.get('date'),
+            'readTime': post_data.get('readTime'),
+            'excerpt': post_data.get('excerpt'),
+            'book': post_data.get('book'),
+            'tags': post_data.get('tags', []),
+        })
+        response_object['message'] = 'Post Added!'
+
+        with open('blog_posts.json', 'w') as f:
+            json.dump(BLOG_POSTS, f, indent=4)
+    else:
+        response_object['posts'] = BLOG_POSTS
     return jsonify(response_object)
 
 def remove_book(book_id):
