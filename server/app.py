@@ -12,7 +12,7 @@ import json
 load_dotenv()
 
 #instantiate the app
-app = Flask(__name__, static_folder='../client/dist', static_url_path='')
+app = Flask(__name__, static_folder='../client/dist', static_url_path='/static')
 bcrypt = Bcrypt(app)
 app.config.from_object(__name__)
 
@@ -36,27 +36,6 @@ users_db = {
 
 with open('books.json', 'r') as f:
     BOOKS = json.load(f)
-
-BOOKS = [
-    {
-        'id': uuid.uuid4().hex,
-        'title': 'On the Road',
-        'author': 'Jack Kerouac',
-        'read': True
-    },
-    {
-        'id': uuid.uuid4().hex,
-        'title': 'Harry Potter and the Philosopher\'s Stone',
-        'author': 'J. K. Rowling',
-        'read': False
-    },
-    {
-        'id': uuid.uuid4().hex,
-        'title': 'Green Eggs and Ham',
-        'author': 'Dr. Seuss',
-        'read': True
-    }
-]
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -151,13 +130,14 @@ def remove_book(book_id):
 def ping_pong():
     return jsonify("pong")
 
-@app.route('/api/<path:path>')
-def serve_static(path):
-    return send_from_directory(app.static_folder, path)
+@app.route('/assets/<path:path>')
+def serve_assets(path):
+    return send_from_directory(os.path.join(app.static_folder, 'assets'), path)
 
 # Serve the index.html for all other routes (fallback)
 @app.route('/')
-def serve_index():
+@app.route('/<path:path>')
+def serve_index(path=None):
     return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
