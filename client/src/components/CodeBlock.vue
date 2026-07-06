@@ -174,8 +174,12 @@ export default {
 
 pre {
     margin: 0;
-    overflow-x: auto;
+    max-height: min(32rem, 62vh);
+    overflow-x: hidden;
+    overflow-y: auto;
     padding: 1rem 1.1rem 1.15rem;
+    scrollbar-color: rgba(113, 119, 131, 0.42) transparent;
+    scrollbar-width: thin;
 }
 
 code {
@@ -186,7 +190,8 @@ code {
     font-size: 0.9rem;
     line-height: 1.7;
     tab-size: 4;
-    white-space: pre;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
 }
 
 .token-keyword {
