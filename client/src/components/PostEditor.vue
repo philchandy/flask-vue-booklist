@@ -5,6 +5,7 @@
                 <button type="button" class="ghost-button" @click="$router.push('/')">Back to posts</button>
                 <div class="toolbar-actions" v-if="canEdit">
                     <span class="save-state" v-if="statusMessage">{{ statusMessage }}</span>
+                    <button type="button" class="ghost-button" @click="insertCodeBlockAtCursor">Code Block</button>
                     <button type="button" class="ghost-button" @click="handleInlineUploadClick">Upload Image</button>
                     <button type="button" class="primary-button" @click="savePost">Save Post</button>
                 </div>
@@ -58,6 +59,10 @@
                     <div class="post-body" v-else>
                         <template v-for="(block, index) in postBodyBlocks(postForm.excerpt)" :key="`post-block-${index}`">
                             <img v-if="block.type === 'image'" class="inline-post-image" :src="block.src" :alt="block.alt">
+                            <CodeBlock
+                                v-else-if="block.type === 'code'"
+                                :code="block.code"
+                                :language="block.language" />
                             <p v-else-if="block.text">{{ block.text }}</p>
                         </template>
                     </div>
@@ -101,8 +106,13 @@
 
 <script>
 import axios from 'axios';
+import CodeBlock from './CodeBlock.vue';
+import { postBodyBlocks } from '../utils/postBlocks';
 
 export default {
+    components: {
+        CodeBlock,
+    },
     props: {
         isAdmin: {
             type: Boolean,
@@ -231,20 +241,7 @@ export default {
                 });
         },
         postBodyBlocks(text) {
-            return (text || '').split(/\r?\n/).map((line) => {
-                const imageMatch = line.trim().match(/^!\[(.*?)]\((.*?)\)$/);
-                if (imageMatch) {
-                    return {
-                        type: 'image',
-                        alt: imageMatch[1] || 'Blog post image',
-                        src: imageMatch[2],
-                    };
-                }
-                return {
-                    type: 'text',
-                    text: line.trim(),
-                };
-            });
+            return postBodyBlocks(text);
         },
         inlineImagesFromText(text) {
             return (text || '').split(/\r?\n/).reduce((images, line, lineIndex) => {
@@ -354,6 +351,26 @@ export default {
 
             this.postForm.excerpt = `${before}${prefix}${marker}${suffix}${after}`;
             this.selectedInlineImageLineIndex = null;
+            this.$nextTick(() => {
+                const cursorPosition = before.length + prefix.length + marker.length;
+                textarea?.focus();
+                textarea?.setSelectionRange(cursorPosition, cursorPosition);
+            });
+        },
+        insertCodeBlockAtCursor() {
+            const textarea = this.$refs.postText;
+            const currentText = this.postForm.excerpt || '';
+            const start = textarea?.selectionStart ?? currentText.length;
+            const end = textarea?.selectionEnd ?? currentText.length;
+            const selectedText = currentText.slice(start, end);
+            const before = currentText.slice(0, start);
+            const after = currentText.slice(end);
+            const codeText = selectedText || 'const value = true;';
+            const marker = `\`\`\`js\n${codeText}\n\`\`\``;
+            const prefix = before && !before.endsWith('\n') ? '\n' : '';
+            const suffix = after && !after.startsWith('\n') ? '\n' : '';
+
+            this.postForm.excerpt = `${before}${prefix}${marker}${suffix}${after}`;
             this.$nextTick(() => {
                 const cursorPosition = before.length + prefix.length + marker.length;
                 textarea?.focus();

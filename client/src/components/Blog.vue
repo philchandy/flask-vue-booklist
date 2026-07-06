@@ -55,6 +55,10 @@
                                     class="inline-post-image"
                                     :src="block.src"
                                     :alt="block.alt">
+                                <CodeBlock
+                                    v-else-if="block.type === 'code'"
+                                    :code="block.code"
+                                    :language="block.language" />
                                 <p v-else-if="block.text" class="mb-2">{{ block.text }}</p>
                             </template>
                         </div>
@@ -191,8 +195,13 @@
 
 <script>
 import axios from 'axios';
+import CodeBlock from './CodeBlock.vue';
+import { postBodyBlocks } from '../utils/postBlocks';
 
 export default {
+    components: {
+        CodeBlock,
+    },
     props: {
         isAdmin: {
             type: Boolean,
@@ -339,20 +348,7 @@ export default {
                 });
         },
         postBodyBlocks(text) {
-            return (text || '').split(/\r?\n/).map((line) => {
-                const imageMatch = line.trim().match(/^!\[(.*?)]\((.*?)\)$/);
-                if (imageMatch) {
-                    return {
-                        type: 'image',
-                        alt: imageMatch[1] || 'Blog post image',
-                        src: imageMatch[2],
-                    };
-                }
-                return {
-                    type: 'text',
-                    text: line.trim(),
-                };
-            });
+            return postBodyBlocks(text);
         },
         inlineImagesFromText(text) {
             return (text || '').split(/\r?\n/).reduce((images, line, lineIndex) => {
