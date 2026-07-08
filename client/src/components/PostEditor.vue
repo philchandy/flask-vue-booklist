@@ -58,7 +58,13 @@
 
                     <div class="post-body" v-else>
                         <template v-for="(block, index) in postBodyBlocks(postForm.excerpt)" :key="`post-block-${index}`">
-                            <img v-if="block.type === 'image'" class="inline-post-image" :src="block.src" :alt="block.alt">
+                            <button
+                                v-if="block.type === 'image'"
+                                class="inline-post-image"
+                                type="button"
+                                @click="openInlineImage(block)">
+                                <img :src="block.src" :alt="block.alt">
+                            </button>
                             <CodeBlock
                                 v-else-if="block.type === 'code'"
                                 :code="block.code"
@@ -100,6 +106,19 @@
                     </aside>
                 </article>
             </div>
+
+            <Teleport to="body">
+                <div
+                    v-if="activeInlineImage"
+                    class="image-lightbox"
+                    role="dialog"
+                    aria-modal="true"
+                    :aria-label="activeInlineImage.alt"
+                    @click.self="closeInlineImage">
+                    <button type="button" class="image-lightbox-close" aria-label="Close image" @click="closeInlineImage">&times;</button>
+                    <img :src="activeInlineImage.src" :alt="activeInlineImage.alt">
+                </div>
+            </Teleport>
         </section>
     </main>
 </template>
@@ -130,6 +149,7 @@ export default {
             selectedInlineImageLineIndex: null,
             errorMessage: '',
             statusMessage: '',
+            activeInlineImage: null,
             postForm: this.emptyPostForm(),
         };
     },
@@ -242,6 +262,14 @@ export default {
         },
         postBodyBlocks(text) {
             return postBodyBlocks(text);
+        },
+        openInlineImage(image) {
+            this.activeInlineImage = image;
+            document.body.classList.add('modal-open');
+        },
+        closeInlineImage() {
+            this.activeInlineImage = null;
+            document.body.classList.remove('modal-open');
         },
         inlineImagesFromText(text) {
             return (text || '').split(/\r?\n/).reduce((images, line, lineIndex) => {
@@ -518,11 +546,57 @@ export default {
 .inline-post-image {
     display: block;
     width: 100%;
-    aspect-ratio: 16 / 9;
-    object-fit: cover;
+    border: 0;
     border-radius: 10px;
+    background: #f9fafb;
     margin: 1.4rem 0 1.6rem;
+    padding: 0;
+    cursor: zoom-in;
+    overflow: hidden;
     box-shadow: 0 18px 40px rgba(31, 41, 55, 0.1);
+}
+
+.inline-post-image img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 620px;
+    object-fit: contain;
+}
+
+.image-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 1060;
+    display: grid;
+    place-items: center;
+    background: rgba(15, 23, 42, 0.82);
+    padding: clamp(1rem, 4vw, 3rem);
+}
+
+.image-lightbox img {
+    width: auto;
+    height: auto;
+    max-width: 92vw;
+    max-height: 88vh;
+    object-fit: contain;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+}
+
+.image-lightbox-close {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #1f2937;
+    font-size: 1.75rem;
+    line-height: 1;
 }
 
 .image-panel {

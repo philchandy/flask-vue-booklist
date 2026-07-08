@@ -50,11 +50,13 @@
                         <h2 class="h4 mb-3">{{ post.title }}</h2>
                         <div class="post-body text-secondary mb-4">
                             <template v-for="(block, index) in postBodyBlocks(post.excerpt)" :key="`${post.id}-block-${index}`">
-                                <img
+                                <button
                                     v-if="block.type === 'image'"
                                     class="inline-post-image"
-                                    :src="block.src"
-                                    :alt="block.alt">
+                                    type="button"
+                                    @click.stop="openInlineImage(block)">
+                                    <img :src="block.src" :alt="block.alt">
+                                </button>
                                 <CodeBlock
                                     v-else-if="block.type === 'code'"
                                     :code="block.code"
@@ -190,6 +192,19 @@
             </div>
         </div>
         <div v-if="activePostModal" class="modal-backdrop fade show"></div>
+
+        <Teleport to="body">
+            <div
+                v-if="activeInlineImage"
+                class="image-lightbox"
+                role="dialog"
+                aria-modal="true"
+                :aria-label="activeInlineImage.alt"
+                @click.self="closeInlineImage">
+                <button type="button" class="image-lightbox-close" aria-label="Close image" @click="closeInlineImage">&times;</button>
+                <img :src="activeInlineImage.src" :alt="activeInlineImage.alt">
+            </div>
+        </Teleport>
     </main>
 </template>
 
@@ -221,6 +236,7 @@ export default {
             isUploadingImage: false,
             isDraggingImage: false,
             selectedInlineImageLineIndex: null,
+            activeInlineImage: null,
             errorMessage: '',
             postForm: {
                 id: '',
@@ -349,6 +365,16 @@ export default {
         },
         postBodyBlocks(text) {
             return postBodyBlocks(text);
+        },
+        openInlineImage(image) {
+            this.activeInlineImage = image;
+            document.body.classList.add('modal-open');
+        },
+        closeInlineImage() {
+            this.activeInlineImage = null;
+            if (!this.activePostModal) {
+                document.body.classList.remove('modal-open');
+            }
         },
         inlineImagesFromText(text) {
             return (text || '').split(/\r?\n/).reduce((images, line, lineIndex) => {
@@ -529,8 +555,7 @@ export default {
 }
 
 .post-image,
-.post-image-preview,
-.inline-post-image {
+.post-image-preview {
     display: block;
     width: 100%;
     aspect-ratio: 16 / 9;
@@ -545,7 +570,58 @@ export default {
 }
 
 .inline-post-image {
+    display: block;
+    width: 100%;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: #f8f9fa;
     margin: 0.75rem 0 1rem;
+    padding: 0;
+    cursor: zoom-in;
+    overflow: hidden;
+}
+
+.inline-post-image img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 520px;
+    object-fit: contain;
+}
+
+.image-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 1060;
+    display: grid;
+    place-items: center;
+    background: rgba(15, 23, 42, 0.82);
+    padding: clamp(1rem, 4vw, 3rem);
+}
+
+.image-lightbox img {
+    width: auto;
+    height: auto;
+    max-width: 92vw;
+    max-height: 88vh;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+}
+
+.image-lightbox-close {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #1f2937;
+    font-size: 1.75rem;
+    line-height: 1;
 }
 
 .post-body p:last-child {
